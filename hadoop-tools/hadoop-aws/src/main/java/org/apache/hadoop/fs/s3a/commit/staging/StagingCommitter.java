@@ -398,10 +398,16 @@ public class StagingCommitter extends AbstractS3ACommitter {
    * @return the S3 key where the file will be uploaded
    */
   protected String getFinalKey(String relative, JobContext context) {
+    StringBuilder sb = new StringBuilder();
+    final String pfx = getS3KeyPrefix(context);
+    if (!pfx.isEmpty()) {
+        sb.append(pfx).append('/');
+    }
+
     if (uniqueFilenames) {
-      return getS3KeyPrefix(context) + "/" + Paths.addUUID(relative, uuid);
+        return sb.append(Paths.addUUID(relative, getUUID())).toString();
     } else {
-      return getS3KeyPrefix(context) + "/" + relative;
+        return sb.append(relative).toString();
     }
   }
 
