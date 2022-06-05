@@ -338,6 +338,12 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
    */
   private final ContextAccessors contextAccessors = new ContextAccessorsImpl();
 
+
+  /* LRU Cache */
+  private long cacheSize;
+  private boolean cacheEnabled;
+  private String cachePath;
+
   /** Add any deprecated keys. */
   @SuppressWarnings("deprecation")
   private static void addDeprecatedKeys() {
@@ -514,6 +520,12 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
       pageSize = intOption(getConf(), BULK_DELETE_PAGE_SIZE,
           BULK_DELETE_PAGE_SIZE_DEFAULT, 0);
       listing = new Listing(listingOperationCallbacks, createStoreContext());
+
+      cacheEnabled = conf.getBoolean(
+          Constants.LRU_CACHE_ENABLE, false);
+      cachePath = conf.getTrimmed(Constants.LRU_CACHE_PATH, "/raid/cache/");
+      cacheSize = conf.getLong(Constants.LRU_CACHE_SIZE, Constants.DEFAULT_CACHE_SIZE);
+       
     } catch (AmazonClientException e) {
       // amazon client exception: stop all services then throw the translation
       stopAllServices();
@@ -1228,7 +1240,8 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
         new S3AInputStream(
             readContext,
             createObjectAttributes(fileStatus),
-            s3));
+            s3, 
+            cacheEnabled, cacheSize, cachePath));
   }
 
   /**

@@ -1081,4 +1081,10 @@ public final class Constants {
    */
   public static final String XA_HEADER_PREFIX = "header.";
 
+  /** LRU Cache */
+  public static final long DEFAULT_CACHE_SIZE = 100 * 1024 * 1024 * 1024;
+
+  public static final String LRU_CACHE_PATH = "fs.s3a.cache.path";
+  public static final String LRU_CACHE_SIZE = "fs.s3a.cache.size";
+  public static final String LRU_CACHE_ENABLE = "fs.s3a.cache.enable";
 }

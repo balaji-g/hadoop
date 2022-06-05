@@ -140,6 +140,11 @@ public class S3AInputStream extends FSInputStream implements  CanSetReadahead,
    */
   private final IOStatistics ioStatistics;
 
+  /* LRU Cache */
+  private long cacheSize;
+  private boolean cacheEnabled;
+  private String cachePath;
+
   /**
    * Create the stream.
    * This does not attempt to open it; that is only done on the first
@@ -150,7 +155,10 @@ public class S3AInputStream extends FSInputStream implements  CanSetReadahead,
    */
   public S3AInputStream(S3AReadOpContext ctx,
       S3ObjectAttributes s3Attributes,
-      AmazonS3 client) {
+      AmazonS3 client,
+      boolean _cacheEnabled, 
+      long _cacheSize, 
+      String _cachePath) {
     Preconditions.checkArgument(isNotEmpty(s3Attributes.getBucket()),
         "No Bucket");
     Preconditions.checkArgument(isNotEmpty(s3Attributes.getKey()), "No Key");
@@ -175,6 +183,9 @@ public class S3AInputStream extends FSInputStream implements  CanSetReadahead,
         s3Attributes);
     setInputPolicy(ctx.getInputPolicy());
     setReadahead(ctx.getReadahead());
+    this.cacheEnabled = _cacheEnabled;
+    this.cachePath = _cachePath;
+    this.cacheSize = _cacheSize;
   }
 
   /**
