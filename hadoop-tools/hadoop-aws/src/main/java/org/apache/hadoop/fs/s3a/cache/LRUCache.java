@@ -1,6 +1,6 @@
 package org.apache.hadoop.fs.s3a.cache;
 
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileInputStream;
@@ -38,18 +38,16 @@ public class LRUCache {
     long capacity = 0L;
     long currentSize = 0L;
     String location;
-    String key;
-	HashMap<String, CacheBlock> map = null;
+	ConcurrentHashMap<String, CacheBlock> map = null;
     
     private static final Logger LOG =
         LoggerFactory.getLogger(LRUCache.class);
 	
 
-    public LRUCache(final long _c, final String _loc, final String _k) {
+    public LRUCache(final long _c, final String _loc) {
         this.capacity = _c;
         this.location = _loc;
-        this.key = _k;
-        map = new HashMap<String, CacheBlock>();
+        map = new ConcurrentHashMap<String, CacheBlock>();
     }
 
     public S3ObjectInputStream get(final String key) {
@@ -62,6 +60,7 @@ public class LRUCache {
         removeBlock(blk);
         offerBlock(blk);
         try {
+            LOG.info("Found key {}, in cache.", key);
             return new S3ObjectInputStream(new FileInputStream(new File(blk.location)), null);
         } catch (FileNotFoundException e) {
             LOG.error("Caught {}, {}", e, blk.location);
@@ -79,6 +78,7 @@ public class LRUCache {
             currentSize -= head.size;
             removeBlock(head);
             deleteFile(head.location);
+            LOG.info("Removing key {}, from cache.", head.key);
         }
 
         //write file
@@ -93,6 +93,8 @@ public class LRUCache {
         CacheBlock blk = new CacheBlock(size, fileLoc, key);
         offerBlock(blk);
         map.put(key, blk);
+        currentSize += size;
+        LOG.info("Adding key {}, to cache.", key);
         
         try {
             return new S3ObjectInputStream(new FileInputStream(new File(fileLoc)), null);
@@ -102,7 +104,7 @@ public class LRUCache {
         return null;
     }
 
-    private void removeBlock(final CacheBlock n) {
+    private synchronized void removeBlock(final CacheBlock n) {
         if (n.prev != null) {
             n.prev.next = n.next;
         } else {
@@ -116,7 +118,7 @@ public class LRUCache {
         }
     }
 
-    private void offerBlock(final CacheBlock n) {
+    private synchronized void offerBlock(final CacheBlock n) {
         if (tail != null) {
             tail.next = n;
         }
@@ -156,7 +158,7 @@ public class LRUCache {
             bytesRead = fc.transferFrom(rc, 0, size);
         } catch (Exception e) {
             fail = true;
-            LOG.error("Caught exception {} when writting to {}", e, location+key);
+            LOG.error("Caught exception {} when writting to {}", e, fileLoc);
         } finally {
             if (fos != null) {
                 try {

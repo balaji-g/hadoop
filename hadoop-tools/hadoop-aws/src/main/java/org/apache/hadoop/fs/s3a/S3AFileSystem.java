@@ -175,6 +175,7 @@ import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.SemaphoredDelegatingExecutor;
 import org.apache.hadoop.util.concurrent.HadoopExecutors;
+import org.apache.hadoop.fs.s3a.cache.LRUCache;
 
 import static java.util.Objects.requireNonNull;
 import static org.apache.hadoop.fs.impl.AbstractFSBuilderImpl.rejectUnknownMandatoryKeys;
@@ -343,6 +344,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
   private long cacheSize;
   private boolean cacheEnabled;
   private String cachePath;
+  private LRUCache cache = null;
 
   /** Add any deprecated keys. */
   @SuppressWarnings("deprecation")
@@ -525,6 +527,10 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
           Constants.LRU_CACHE_ENABLE, false);
       cachePath = conf.getTrimmed(Constants.LRU_CACHE_PATH, "/raid/cache/");
       cacheSize = conf.getLong(Constants.LRU_CACHE_SIZE, Constants.DEFAULT_CACHE_SIZE);
+
+      if (cacheEnabled) {
+        cache = new LRUCache(cacheSize, cachePath);
+      }
        
     } catch (AmazonClientException e) {
       // amazon client exception: stop all services then throw the translation
@@ -1240,8 +1246,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
         new S3AInputStream(
             readContext,
             createObjectAttributes(fileStatus),
-            s3, 
-            cacheEnabled, cacheSize, cachePath));
+            s3, cache));
   }
 
   /**

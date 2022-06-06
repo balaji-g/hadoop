@@ -41,6 +41,7 @@ import org.apache.hadoop.fs.PathIOException;
 import org.apache.hadoop.fs.StreamCapabilities;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.statistics.DurationTracker;
+import org.apache.hadoop.fs.s3a.cache.LRUCache;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -141,9 +142,7 @@ public class S3AInputStream extends FSInputStream implements  CanSetReadahead,
   private final IOStatistics ioStatistics;
 
   /* LRU Cache */
-  private long cacheSize;
-  private boolean cacheEnabled;
-  private String cachePath;
+  private LRUCache cache = null;
 
   /**
    * Create the stream.
@@ -156,9 +155,7 @@ public class S3AInputStream extends FSInputStream implements  CanSetReadahead,
   public S3AInputStream(S3AReadOpContext ctx,
       S3ObjectAttributes s3Attributes,
       AmazonS3 client,
-      boolean _cacheEnabled, 
-      long _cacheSize, 
-      String _cachePath) {
+      LRUCache _cache) {
     Preconditions.checkArgument(isNotEmpty(s3Attributes.getBucket()),
         "No Bucket");
     Preconditions.checkArgument(isNotEmpty(s3Attributes.getKey()), "No Key");
@@ -183,9 +180,7 @@ public class S3AInputStream extends FSInputStream implements  CanSetReadahead,
         s3Attributes);
     setInputPolicy(ctx.getInputPolicy());
     setReadahead(ctx.getReadahead());
-    this.cacheEnabled = _cacheEnabled;
-    this.cachePath = _cachePath;
-    this.cacheSize = _cacheSize;
+    this.cache = _cache;
   }
 
   /**
@@ -221,6 +216,16 @@ public class S3AInputStream extends FSInputStream implements  CanSetReadahead,
         uri, reason, targetPos, contentRangeFinish, length,  pos, nextReadPos,
         inputPolicy);
 
+    String cacheKey = String.format("%s_%s_%s", key, targetPos, length);
+    if (cache != null) {
+        wrappedStream = cache.get(cacheKey);
+        if (wrappedStream != null) {
+            contentRangeStart = targetPos;
+            this.pos = targetPos;
+            return;
+        }
+    }
+
     long opencount = streamStatistics.streamOpened();
     GetObjectRequest request = new GetObjectRequest(bucket, key)
         .withRange(targetPos, contentRangeFinish - 1);
@@ -250,7 +255,12 @@ public class S3AInputStream extends FSInputStream implements  CanSetReadahead,
 
     changeTracker.processResponse(object, operation,
         targetPos);
-    wrappedStream = object.getObjectContent();
+
+    if (cache != null) {
+        wrappedStream = cache.put(cacheKey, object.getObjectContent(), length);
+    } else {
+        wrappedStream = object.getObjectContent();
+    }
     contentRangeStart = targetPos;
     if (wrappedStream == null) {
       throw new PathIOException(uri,
