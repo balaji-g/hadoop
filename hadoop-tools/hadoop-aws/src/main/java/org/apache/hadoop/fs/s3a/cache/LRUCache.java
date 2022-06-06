@@ -97,6 +97,12 @@ public class LRUCache {
         LOG.info("Adding key {}, to cache.", key);
         
         try {
+            //Create dir if necessary
+            final int i = fileLoc.lastIndexOf("/");
+            if (i > 0) {
+                File dir = new File(fileLoc.substring(0, i));
+                dir.mkdirs();
+            }
             return new S3ObjectInputStream(new FileInputStream(new File(fileLoc)), null);
         } catch (FileNotFoundException e) {
             LOG.error("Caught {}, {}", e, fileLoc);
