@@ -41,6 +41,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -528,8 +529,9 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
       cachePath = conf.getTrimmed(Constants.LRU_CACHE_PATH, "/raid/cache/");
       cacheSize = conf.getLong(Constants.LRU_CACHE_SIZE, Constants.DEFAULT_CACHE_SIZE);
 
+      LOG.info("LRUCache settings {}, {}, {}", cacheEnabled, cachePath, cacheSize);
       if (cacheEnabled) {
-        cache = new LRUCache(cacheSize, cachePath);
+        cache = new LRUCache(cacheSize, cachePath + UUID.randomUUID() + "/");
       }
        
     } catch (AmazonClientException e) {

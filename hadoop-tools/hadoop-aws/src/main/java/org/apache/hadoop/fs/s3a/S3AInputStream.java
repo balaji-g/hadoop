@@ -20,6 +20,7 @@ package org.apache.hadoop.fs.s3a;
 
 import javax.annotation.Nullable;
 
+import java.io.ByteArrayInputStream;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.S3Object;
@@ -143,6 +144,8 @@ public class S3AInputStream extends FSInputStream implements  CanSetReadahead,
 
   /* LRU Cache */
   private LRUCache cache = null;
+  private boolean cachemiss = false;
+  private String cacheKey;
 
   /**
    * Create the stream.
@@ -216,7 +219,7 @@ public class S3AInputStream extends FSInputStream implements  CanSetReadahead,
         uri, reason, targetPos, contentRangeFinish, length,  pos, nextReadPos,
         inputPolicy);
 
-    String cacheKey = String.format("%s_%s_%s", key, targetPos, length);
+    cacheKey = String.format("%s/%s/%s", targetPos, contentRangeFinish-targetPos, key);
     if (cache != null) {
         wrappedStream = cache.get(cacheKey);
         if (wrappedStream != null) {
@@ -224,6 +227,7 @@ public class S3AInputStream extends FSInputStream implements  CanSetReadahead,
             this.pos = targetPos;
             return;
         }
+        cachemiss = true;
     }
 
     long opencount = streamStatistics.streamOpened();
@@ -256,11 +260,29 @@ public class S3AInputStream extends FSInputStream implements  CanSetReadahead,
     changeTracker.processResponse(object, operation,
         targetPos);
 
+    wrappedStream = object.getObjectContent();
     if (cache != null) {
-        wrappedStream = cache.put(cacheKey, object.getObjectContent(), length);
-    } else {
-        wrappedStream = object.getObjectContent();
+        int clength = (int)object.getObjectMetadata().getContentLength();
+        byte[] data = new byte[clength];
+        try {
+            int read = 0;
+            int off = 0;
+            int toRead = 0;
+            while (off < data.length && read >=0) {
+                off += read;
+                toRead = data.length - off;
+                read = wrappedStream.read(data, off, toRead);
+            }
+        } catch (Exception e) {
+            throw new PathIOException(uri,
+                "Unable to read stream from " + operation + " of (" + reason +  ") ");
+        } finally {
+            wrappedStream.close();
+        }
+        wrappedStream = new S3ObjectInputStream(new ByteArrayInputStream(data), null);
+        cache.put(cacheKey, data, clength);
     }
+
     contentRangeStart = targetPos;
     if (wrappedStream == null) {
       throw new PathIOException(uri,
