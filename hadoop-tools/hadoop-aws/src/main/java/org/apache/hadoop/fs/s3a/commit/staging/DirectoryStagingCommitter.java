@@ -68,8 +68,11 @@ public class DirectoryStagingCommitter extends StagingCommitter {
     FileSystem fs = getDestFS();
     ConflictResolution conflictResolution = getConflictResolutionMode(
         context, fs.getConf());
-    LOG.info("Conflict Resolution mode is {}", conflictResolution);
+    LOG.info("Conflict Resolution mode is {}", conflictResolution, outputPath, fs);
     try {
+
+      //Don't check status for APPEND and REPLACE. Can fail later
+
       final FileStatus status = fs.getFileStatus(outputPath);
 
       // if it is not a directory, fail fast for all conflict options.

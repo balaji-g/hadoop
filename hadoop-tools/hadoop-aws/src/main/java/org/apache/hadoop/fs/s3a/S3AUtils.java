@@ -1310,6 +1310,7 @@ public final class S3AUtils {
     }
     awsConf.setRequestTimeout((int) requestTimeoutMillis);
     awsConf.setSocketBufferSizeHints(sockSendBuffer, sockRecvBuffer);
+    awsConf.setUseTcpKeepAlive(true);
     String signerOverride = conf.getTrimmed(SIGNING_ALGORITHM, "");
     if (!signerOverride.isEmpty()) {
      LOG.debug("Signer override = {}", signerOverride);

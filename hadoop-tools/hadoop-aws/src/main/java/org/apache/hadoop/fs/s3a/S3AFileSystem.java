@@ -38,6 +38,7 @@ import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.Optional;
 import java.util.Set;
 import java.util.Objects;
@@ -177,6 +178,7 @@ import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.SemaphoredDelegatingExecutor;
 import org.apache.hadoop.util.concurrent.HadoopExecutors;
 import org.apache.hadoop.fs.s3a.cache.LRUCache;
+import org.apache.hadoop.fs.s3a.cache.LRUCache2;
 
 import static java.util.Objects.requireNonNull;
 import static org.apache.hadoop.fs.impl.AbstractFSBuilderImpl.rejectUnknownMandatoryKeys;
@@ -311,6 +313,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
   private SignerManager signerManager;
 
   private ITtlTimeProvider ttlTimeProvider;
+  private HashMap<String, ObjectMetadata> mdMap;
 
   /**
    * Page size for deletions.
@@ -345,7 +348,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
   private long cacheSize;
   private boolean cacheEnabled;
   private String cachePath;
-  private LRUCache cache = null;
+  private LRUCache2 cache = null;
 
   /** Add any deprecated keys. */
   @SuppressWarnings("deprecation")
@@ -523,6 +526,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
       pageSize = intOption(getConf(), BULK_DELETE_PAGE_SIZE,
           BULK_DELETE_PAGE_SIZE_DEFAULT, 0);
       listing = new Listing(listingOperationCallbacks, createStoreContext());
+      mdMap = new HashMap<String, ObjectMetadata>();
 
       cacheEnabled = conf.getBoolean(
           Constants.LRU_CACHE_ENABLE, false);
@@ -531,7 +535,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
 
       LOG.info("LRUCache settings {}, {}, {}", cacheEnabled, cachePath, cacheSize);
       if (cacheEnabled) {
-        cache = new LRUCache(cacheSize, cachePath + UUID.randomUUID() + "/");
+        cache = new LRUCache2(cacheSize, cachePath + UUID.randomUUID() + "/");
       }
        
     } catch (AmazonClientException e) {
@@ -1338,6 +1342,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
     final Path path = qualify(f);
     String key = pathToKey(path);
     FileStatus status = null;
+    LOG.info("create: {}", f);
     try {
       // get the status or throw an FNFE.
       // when overwriting, there is no need to look for any existing file,
@@ -1422,6 +1427,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
     final Path path = makeQualified(p);
     Path parent = path.getParent();
     // expect this to raise an exception if there is no parent dir
+    LOG.info("createNonRecursive: {}", p);
     if (parent != null && !parent.isRoot()) {
       S3AFileStatus status;
       try {
@@ -1514,6 +1520,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
     String srcKey = pathToKey(src);
     String dstKey = pathToKey(dst);
 
+    LOG.info("initiateRename {},{}", src, dst);
     if (srcKey.isEmpty()) {
       throw new RenameFailedException(src, dst, "source is root directory");
     }
@@ -1748,6 +1755,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
         final Path path,
         final String key)
         throws IOException {
+      LOG.debug("listObjects: {}", path)
       return once("listObjects", key, () ->
           listing.createFileStatusListingIterator(path,
               createListObjectsRequest(key, null),
@@ -2069,6 +2077,12 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
       ChangeTracker changeTracker,
       Invoker changeInvoker,
       String operation) throws IOException {
+
+    ObjectMetadata omd = mdMap.get(key);
+    if (omd != null) {
+        return omd;
+    }
+
     GetObjectMetadataRequest request =
         new GetObjectMetadataRequest(bucket, key);
     //SSE-C requires to be filled in if enabled for object metadata
@@ -2102,6 +2116,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
           }
         });
     incrementReadOperations();
+    mdMap.put(key, meta);
     return meta;
   }
 
@@ -2739,6 +2754,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
   @Retries.RetryTranslated
   public boolean delete(Path f, boolean recursive) throws IOException {
     try {
+      LOG.info("delete {}", f);
       entryPoint(INVOCATION_DELETE);
       DeleteOperation deleteOperation = new DeleteOperation(
           createStoreContext(),
@@ -3070,6 +3086,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
   @Retries.RetryTranslated
   public FileStatus getFileStatus(final Path f) throws IOException {
     entryPoint(INVOCATION_GET_FILE_STATUS);
+    LOG.info("getFileStatus {}", f);
     return innerGetFileStatus(f, false, StatusProbeEnum.ALL);
   }
 
@@ -4294,6 +4311,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
   public boolean isDirectory(Path f) throws IOException {
     entryPoint(INVOCATION_IS_DIRECTORY);
     try {
+      LOG.info("isDirectory {}", f);
       return innerGetFileStatus(f, false, StatusProbeEnum.DIRECTORIES)
           .isDirectory();
     } catch (FileNotFoundException e) {
@@ -4313,6 +4331,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
   public boolean isFile(Path f) throws IOException {
     entryPoint(INVOCATION_IS_FILE);
     try {
+      LOG.info("isFile {}", f);
       return innerGetFileStatus(f, false, StatusProbeEnum.HEAD_ONLY)
           .isFile();
     } catch (FileNotFoundException e) {

@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.BufferedInputStream;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
@@ -117,7 +118,8 @@ public class LRUCache {
 
         try {
             LOG.info("Found key {},{} in cache.", key, blk.size);
-            return new S3ObjectInputStream(new FileInputStream(new File(blk.location)), null);
+            final int readSize = 1024 * 1024;
+            return new S3ObjectInputStream(new BufferedInputStream(new FileInputStream(new File(blk.location)),readSize), null);
         } catch (FileNotFoundException e) {
             LOG.error("Caught {}, {}", e, blk.location);
         }

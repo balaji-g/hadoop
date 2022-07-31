@@ -43,6 +43,7 @@ import org.apache.hadoop.fs.StreamCapabilities;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.statistics.DurationTracker;
 import org.apache.hadoop.fs.s3a.cache.LRUCache;
+import org.apache.hadoop.fs.s3a.cache.LRUCache2;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -143,8 +144,7 @@ public class S3AInputStream extends FSInputStream implements  CanSetReadahead,
   private final IOStatistics ioStatistics;
 
   /* LRU Cache */
-  private LRUCache cache = null;
-  private boolean cachemiss = false;
+  private LRUCache2 cache = null;
   private String cacheKey;
 
   /**
@@ -158,7 +158,7 @@ public class S3AInputStream extends FSInputStream implements  CanSetReadahead,
   public S3AInputStream(S3AReadOpContext ctx,
       S3ObjectAttributes s3Attributes,
       AmazonS3 client,
-      LRUCache _cache) {
+      LRUCache2 _cache) {
     Preconditions.checkArgument(isNotEmpty(s3Attributes.getBucket()),
         "No Bucket");
     Preconditions.checkArgument(isNotEmpty(s3Attributes.getKey()), "No Key");
@@ -227,7 +227,6 @@ public class S3AInputStream extends FSInputStream implements  CanSetReadahead,
             this.pos = targetPos;
             return;
         }
-        cachemiss = true;
     }
 
     long opencount = streamStatistics.streamOpened();
@@ -269,9 +268,9 @@ public class S3AInputStream extends FSInputStream implements  CanSetReadahead,
             int off = 0;
             int toRead = 0;
             while (off < data.length && read >=0) {
-                off += read;
                 toRead = data.length - off;
                 read = wrappedStream.read(data, off, toRead);
+                off += read;
             }
         } catch (Exception e) {
             throw new PathIOException(uri,
